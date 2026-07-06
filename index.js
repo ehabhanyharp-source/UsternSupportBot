@@ -1,16 +1,18 @@
 const { Telegraf, Markup } = require('telegraf');
 
+// التوكن الخاص بك
 const bot = new Telegraf('8892358205:AAHVe-QrqCVc5yZAUpNGUWbfm6hhQJd7SE4');
-const SUPPORT_GROUP_ID = '-1003902142304';
-const activeTickets = new Map();
-let ticketCounter = 1000;
+const SUPPORT_GROUP_ID = '-1003902142304'; 
+const activeTickets = new Map(); 
 
-// قاعدة بيانات المنتجات كما هي تماماً
+// ==========================================
+// قاعدة بيانات المشاكل والحلول (محتواك الأصلي بالكامل)
+// ==========================================
 const productsData = {
     netflix: { name: '🎬 Netflix', problems: [
         { id: 'net_1', btn: '🔐 الباسورد غلط / الحساب مقفل', title: 'الباسورد غلط أو الحساب مقفل', steps: '1. تأكد من نسخ الإيميل والباسورد بدقة بدون أي مسافات زائدة.\n2. تأكد من أنك لم تقم بتغيير أي بيانات في الحساب.\n3. إذا استمرت المشكلة، فقد يكون الحساب تحت التحديث المؤقت من المتجر.' },
         { id: 'net_2', btn: '📺 حد الشاشات (Too Many Screens)', title: 'حد الشاشات الأقصى', steps: '1. هذا يعني أن هناك ضغط مؤقت على الحساب من مستخدمين آخرين.\n2. يرجى الانتظار من 5 إلى 10 دقائق وإعادة المحاولة.\n3. تأكد تماماً من دخولك على الشاشة (Profile) الخاصة بك والمحددة لك فقط عند الشراء.' },
-        { id: 'net_3', btn: '🌐 اللغة تغيرت أو اختفت الترجمة العربية', title: 'تغير اللغة أو الترجمة العربية', steps: '1. ادخل إلى إعدادات الحساب من المتصفح (وليس التطبيق) وقم بتغيير لغة الـ Profile الخاص بك إلى العربية.\n2. أثناء تشغيل الفيديو، اضغط على خيار الصوت والترجمة (Audio & Subtitles) وتأكد من اختيار العربية.' },
+        { id: 'net_3', btn: '🌐 اللغة تغيرت أو اختفت الترجمة العربية', title: 'تغير اللغة أو الترجمة العربية', steps: '1. ادخل إلى إعدادات الحساب من المتصفح (وليس التطبيق) وقم بتغيير لغة الـ Profile الخاص بك إلى العربية.\n2. أثناء تشغيل الفيديو، اضغط على خيار الصوت والترجمة (Audio & Subtitles) وتأكد من اختيار العربية.', image: 'https://images.unsplash.com/photo-1574375927938-d5a98e8fed85' },
         { id: 'net_4', btn: '💳 يطلب تحديث طريقة الدفع', title: 'رسالة تحديث طريقة الدفع (Update Payment)', steps: '1. هذه المشكلة تظهر أحياناً بسبب فحص تلقائي من نتفليكس.\n2. يرجى عدم القيام بأي خطوة أو إضافة بطاقتك.\n3. تواصل مع الدعم بالأسفل فوراً ليتم تحديث الاشتراك أو تبديل الحساب لك.' }
     ]},
     shahid: { name: '🌟 Shahid VIP', problems: [
@@ -30,90 +32,121 @@ const productsData = {
     ]}
 };
 
-const mainMenu = Markup.inlineKeyboard([
-    [Markup.button.callback('❓ حلول المشاكل والأسئلة الشائعة', 'faq')],
-    [Markup.button.callback('📖 دليل التشغيل والشروحات', 'guide')],
-    [Markup.button.callback('🛒 أسعار الاشتراكات وطرق الدفع', 'prices')],
-    [Markup.button.callback('⚖️ شروط الاستخدام وسياسة الضمان', 'terms')]
-]);
+const productsList = Object.keys(productsData);
 
-// وظيفة تنبيه العميل (5 دقائق بعد رد الدعم)
-function startReminderTimer(userId) {
-    const ticket = activeTickets.get(userId);
-    if (!ticket) return;
-    if (ticket.timer) clearTimeout(ticket.timer);
-    ticket.timer = setTimeout(async () => {
-        try { await bot.telegram.sendMessage(userId, "⚠️ نحن في انتظار ردك، هل تم حل المشكلة؟"); } 
-        catch (e) {}
-    }, 5 * 60 * 1000);
-}
-
-bot.start((ctx) => ctx.reply(`👋 أهلاً بك يا ${ctx.from.first_name} في بوت Ustern!`, mainMenu));
-
-bot.action('faq', (ctx) => {
-    const btns = Object.keys(productsData).map(key => [Markup.button.callback(productsData[key].name, 'prod_' + key)]);
-    ctx.editMessageText("🛍 اختر المنتج:", Markup.inlineKeyboard(btns));
+// ==========================================
+// منطق البوت الخاص بك
+// ==========================================
+bot.start((ctx) => {
+    const firstName = ctx.from.first_name || "عزيزي المستخدم";
+    const welcomeMessage = `👋 أهلاً بك يا ${firstName} في بوت الدعم الذكي لـ <b>Ustern</b>!\n\n🤖 أنا هنا لمساعدتك فوراً. يرجى اختيار القسم المناسب:`;
+    ctx.reply("🔄 جاري تهيئة البوت الذكي...", { reply_markup: { remove_keyboard: true } }).then(() => {
+        return ctx.reply(welcomeMessage, { parse_mode: 'HTML', ...Markup.inlineKeyboard([
+            [Markup.button.callback('❓ حلول المشاكل والأسئلة الشائعة', 'faq')],
+            [Markup.button.callback('📖 دليل التشغيل والشروحات', 'guides')],
+            [Markup.button.callback('🛒 أسعار الاشتراكات وطرق الدفع', 'pricing')],
+            [Markup.button.callback('⚖️ شروط الاستخدام وسياسة الضمان', 'terms')],
+            [Markup.button.callback('🎧 تحدث مع الدعم', 'human_support')]
+        ])});
+    });
 });
 
-Object.keys(productsData).forEach(key => {
+bot.action('faq', (ctx) => {
+    ctx.answerCbQuery();
+    const buttons = [];
+    for (let i = 0; i < productsList.length; i += 2) {
+        const row = [Markup.button.callback(productsData[productsList[i]].name, 'prod_' + productsList[i])];
+        if (productsList[i + 1]) row.push(Markup.button.callback(productsData[productsList[i + 1]].name, 'prod_' + productsList[i + 1]));
+        buttons.push(row);
+    }
+    buttons.push([Markup.button.callback('🔙 العودة للرئيسية', 'back_home')]);
+    return ctx.reply("🛍️ اختر المنتج الذي تواجه مشكلة فيه:", Markup.inlineKeyboard(buttons));
+});
+
+productsList.forEach(key => {
+    const prod = productsData[key];
     bot.action('prod_' + key, (ctx) => {
-        const btns = productsData[key].problems.map(p => [Markup.button.callback(p.btn, 'err_' + p.id)]);
-        ctx.editMessageText(`📺 المشاكل في ${productsData[key].name}:`, Markup.inlineKeyboard(btns));
+        ctx.answerCbQuery();
+        const problemButtons = prod.problems.map(p => [Markup.button.callback(p.btn, 'err_' + p.id)]);
+        problemButtons.push([Markup.button.callback('🔙 العودة للمنتجات', 'faq')]);
+        return ctx.reply(`يرجى تحديد المشكلة في ${prod.name}:`, Markup.inlineKeyboard(problemButtons));
     });
-    productsData[key].problems.forEach(p => {
+    prod.problems.forEach(p => {
         bot.action('err_' + p.id, (ctx) => {
-            ctx.reply(`🛠️ <b>${p.title}</b>\n\n${p.steps}`, { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('📞 تحدث مع الدعم', 'start_support_flow')]]) });
+            ctx.answerCbQuery();
+            const txt = `🛠️ <b>حل مشكلة (${p.title}) لـ ${prod.name}:</b>\n\n${p.steps}`;
+            const extraButtons = { parse_mode: 'HTML', ...Markup.inlineKeyboard([
+                [Markup.button.callback('📞 لم تحل المشكلة (تحدث مع الدعم)', 'human_support')],
+                [Markup.button.callback('⬅️ العودة لمشاكل المنتج', 'prod_' + key)]
+            ])};
+            p.image ? ctx.replyWithPhoto(p.image, { caption: txt, ...extraButtons }) : ctx.reply(txt, extraButtons);
         });
     });
 });
 
-bot.action('start_support_flow', (ctx) => {
-    const ticketId = ++ticketCounter;
-    const queueNumber = activeTickets.size + 1;
-    activeTickets.set(ctx.from.id, { step: 'ASK_PHONE', chat: [], ticketId: ticketId, queue: queueNumber });
-    ctx.reply(`🎯 تذكرة رقم: ${ticketId}\n⏳ ترتيبك في الانتظار: ${queueNumber}\n⏱️ متوسط الرد: 15-30 دقيقة.\n\nيرجى إدخال رقم الواتساب:`);
+bot.action('guides', (ctx) => { ctx.answerCbQuery(); });
+bot.action('pricing', (ctx) => { ctx.answerCbQuery(); });
+bot.action('terms', (ctx) => { ctx.answerCbQuery(); });
+bot.action('back_home', (ctx) => { ctx.answerCbQuery(); ctx.deleteMessage(); ctx.reply("🔙 العودة للرئيسية."); });
+
+// ==========================================
+// نظام التذاكر المتقدم (السجل الكامل)
+// ==========================================
+function resetTicketTimer(userId) {
+    if (activeTickets.has(userId)) {
+        clearTimeout(activeTickets.get(userId).timer);
+        activeTickets.get(userId).timer = setTimeout(() => {
+            bot.telegram.sendMessage(userId, "⏳ انتهت مدة التذكرة (10 ساعات)، تم إغلاق المحادثة.");
+            activeTickets.delete(userId);
+        }, 10 * 60 * 60 * 1000);
+    }
+}
+
+bot.action('human_support', (ctx) => {
+    ctx.answerCbQuery();
+    activeTickets.set(ctx.from.id, { messages: [], timer: null });
+    resetTicketTimer(ctx.from.id);
+    ctx.reply("🎯 تم فتح تذكرة جديدة. أرسل رسالتك وسنتابع معك:", Markup.inlineKeyboard([Markup.button.callback('❌ إنهاء المحادثة', 'end_chat')]));
+});
+
+bot.action('end_chat', (ctx) => {
+    ctx.answerCbQuery();
+    activeTickets.delete(ctx.from.id);
+    ctx.reply("✅ تم إنهاء المحادثة بنجاح.");
 });
 
 bot.on('message', async (ctx) => {
-    try {
-        const userId = ctx.from.id;
-        const name = ctx.from.first_name;
-        const username = ctx.from.username ? `(@${ctx.from.username})` : "";
-        const chatId = ctx.chat.id.toString();
-
-        // 1. الدعم يرد من الجروب
-        if (chatId === SUPPORT_GROUP_ID && ctx.message.reply_to_message) {
-            const match = ctx.message.reply_to_message.text.match(/ID: (\d+)/);
-            if (match) {
-                const targetId = parseInt(match[1]);
-                const ticket = activeTickets.get(targetId);
-                if (ticket) {
-                    const replyText = ctx.message.text || "رسالة";
-                    ticket.chat.push(`🎧 الدعم: ${replyText}`);
-                    try { await bot.telegram.sendMessage(targetId, `🎧 الدعم: ${replyText}`); } catch(e) {}
-                    try { 
-                        await bot.telegram.editMessageText(SUPPORT_GROUP_ID, ctx.message.reply_to_message.message_id, null, 
-                        `📩 تذكرة رقم: ${ticket.ticketId}\n👤 العميل: ${name} ${username}\n📱 واتساب: ${ticket.phone}\n\n${ticket.chat.join('\n')}\n\n---رد بـ Reply للرد---`);
-                    } catch(e) {}
-                    startReminderTimer(targetId);
-                }
+    // 1. رد الموظف في الجروب
+    if (ctx.chat.id.toString() === SUPPORT_GROUP_ID && ctx.message.reply_to_message) {
+        const text = ctx.message.reply_to_message.text || ctx.message.reply_to_message.caption || "";
+        const match = text.match(/ID: (\d+)/);
+        if (match) {
+            const targetId = parseInt(match[1]);
+            if (activeTickets.has(targetId)) {
+                const msgText = ctx.message.text || "صورة";
+                activeTickets.get(targetId).messages.push(`🎧 الدعم: ${msgText}`);
+                if (ctx.message.text) await bot.telegram.sendMessage(targetId, `🎧 رد الدعم: ${ctx.message.text}`);
+                else if (ctx.message.photo) await bot.telegram.sendPhoto(targetId, ctx.message.photo.slice(-1)[0].file_id, { caption: ctx.message.caption });
             }
-            return;
+            ctx.reply("✅ تم الرد.");
         }
+    } 
+    // 2. رسالة العميل (حفظ السجل الكامل)
+    else if (ctx.from && activeTickets.has(ctx.from.id)) {
+        resetTicketTimer(ctx.from.id);
+        const ticket = activeTickets.get(ctx.from.id);
+        const userMsg = ctx.message.text || "صورة";
+        ticket.messages.push(`👤 ${ctx.from.first_name}: ${userMsg}`);
+        
+        const fullHistory = ticket.messages.join('\n');
+        const msg = `📩 <b>سجل المحادثة الكامل - ID: ${ctx.from.id}</b>\n\n${fullHistory}\n\n---رد بـ Reply للرد على العميل---`;
+        
+        if (ctx.message.text) await bot.telegram.sendMessage(SUPPORT_GROUP_ID, msg, { parse_mode: 'HTML' });
+        else if (ctx.message.photo) await bot.telegram.sendPhoto(SUPPORT_GROUP_ID, ctx.message.photo.slice(-1)[0].file_id, { caption: msg, parse_mode: 'HTML' });
+        ctx.reply("✅ تم إرسال رسالتك.");
+    }
+});
 
-        // 2. العميل يرسل رسالة (خارج الجروب)
-        if (activeTickets.has(userId) && chatId !== SUPPORT_GROUP_ID) {
-            const ticket = activeTickets.get(userId);
-            const text = ctx.message.text || ctx.message.caption || "رسالة";
-            
-            if (ticket.step === 'ASK_PHONE') {
-                ticket.phone = text;
-                ticket.step = 'ACTIVE';
-                const init = await bot.telegram.sendMessage(SUPPORT_GROUP_ID, 
-                    `📩 تذكرة رقم: ${ticket.ticketId}\n🆔 ID: ${userId}\n👤 العميل: ${name} ${username}\n📱 واتساب: ${ticket.phone}\n\n---انتظار الرد---`);
-                ticket.msgId = init.message_id;
-                ctx.reply("✅ تم استلام طلبك، سيقوم الدعم بالرد قريباً.");
-            } else {
-                ticket.chat.push(`👤 ${name}: ${text}`);
-                try {
-                    await
+bot.launch();
+const express = require("express");
+express().listen(3000);
