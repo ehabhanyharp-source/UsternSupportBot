@@ -34,21 +34,7 @@ const productsData = {
 const productsList = Object.keys(productsData);
 
 // ==========================================
-// 2. وظائف إدارة التذاكر
-// ==========================================
-async function closeTicketManually(targetId, adminName) {
-    if (activeTickets.has(targetId)) {
-        const ticket = activeTickets.get(targetId);
-        await bot.telegram.sendMessage(targetId, `✅ تم إغلاق التذكرة بواسطة ${adminName}.`);
-        try {
-            await bot.telegram.editMessageText(SUPPORT_GROUP_ID, ticket.msgId, null, `🎫 تم إغلاق التذكرة بواسطة ${adminName} (ID: ${targetId}).\nيرجى تقييم الدعم:`);
-        } catch(e) {}
-        activeTickets.delete(targetId);
-    }
-}
-
-// ==========================================
-// 3. القوائم والمنطق
+// 2. القوائم والمنطق
 // ==========================================
 const mainMenu = Markup.inlineKeyboard([
     [Markup.button.callback('❓ حلول المشاكل', 'faq')],
@@ -85,35 +71,43 @@ productsList.forEach(key => {
 
 bot.action('human_support', (ctx) => {
     activeTickets.set(ctx.from.id, { step: 'CHAT' });
-    ctx.reply("🎯 أرسل رقم الواتساب الخاص بك والمشكلة بالتفصيل:");
+    ctx.reply("🎯 اكتب رسالتك للدعم وسنقوم بالرد عليك في الجروب.");
 });
 
 // ==========================================
-// 4. معالج الرسائل (النظام المطور)
+// 3. معالج الرسائل المنسق (نظام التذاكر)
 // ==========================================
 bot.on('message', async (ctx) => {
     const userId = ctx.from.id;
     const chatId = ctx.chat.id.toString();
+    const userName = ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name;
 
-    // رسائل العميل
+    // رسائل العميل (إرسال للجروب)
     if (activeTickets.has(userId) && chatId !== SUPPORT_GROUP_ID) {
-        const msg = await bot.telegram.sendMessage(SUPPORT_GROUP_ID, `📩 ID: ${userId}\nالرسالة: ${ctx.message.text || 'صورة'}`);
+        const textToGroup = `📩 تذكرة رقم: 1001\n🆔 ID: ${userId}\n👤 العميل: ${userName}\n\n👤 ${userName}: ${ctx.message.text || 'إرفاق ملف'}\n\n---رد بـ Reply للرد---`;
+        const msg = await bot.telegram.sendMessage(SUPPORT_GROUP_ID, textToGroup);
+        
+        // حفظ رقم الرسالة للرد عليها لاحقاً
         activeTickets.set(userId, { ...activeTickets.get(userId), msgId: msg.message_id });
-        ctx.reply("✅ تم إرسال رسالتك، انتظر الرد.");
+        ctx.reply("✅ تم إرسال رسالتك للدعم.");
     } 
     // ردود الموظف في الجروب
     else if (chatId === SUPPORT_GROUP_ID && ctx.message.reply_to_message) {
-        const match = ctx.message.reply_to_message.text.match(/ID:\s*(\d+)/);
+        const replyText = ctx.message.reply_to_message.text;
+        const match = replyText.match(/ID:\s*(\d+)/);
+        
         if (match) {
-            await bot.telegram.sendMessage(match[1], `📩 رد الدعم: ${ctx.message.text}`);
+            const targetId = match[1];
+            // إرسال رد الدعم للعميل
+            await bot.telegram.sendMessage(targetId, `🎧 الدعم: ${ctx.message.text}`);
+            
+            // تحديث رسالة الجروب لتظهر كأن الدعم رد
+            const updatedText = replyText + `\n🎧 الدعم: ${ctx.message.text}`;
+            try {
+                await bot.telegram.editMessageText(SUPPORT_GROUP_ID, ctx.message.reply_to_message.message_id, null, updatedText);
+            } catch (e) {}
         }
     }
 });
 
-// التعامل مع التقييم والإغلاق
-bot.action(/rate_(.+)/, async (ctx) => {
-    ctx.answerCbQuery('شكراً لتقييمك!');
-    ctx.editMessageText(`🎫 تم تقييم الدعم بـ ${ctx.match[1]} نجوم.`);
-});
-
-bot.launch().then(() => console.log('Bot is running...'));
+bot.launch().then(() => console.log('Bot is running successfully...'));
