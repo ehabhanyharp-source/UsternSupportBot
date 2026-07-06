@@ -1,10 +1,13 @@
 const { Telegraf, Markup } = require('telegraf');
 
+// التوكن الخاص بك
 const bot = new Telegraf('8892358205:AAHVe-QrqCVc5yZAUpNGUWbfm6hhQJd7SE4');
 const SUPPORT_GROUP_ID = '-1003902142304';
-const activeTickets = new Map();
+const activeTickets = new Map(); // الخريطة لتخزين التذاكر النشطة
 
-// --- قاعدة بيانات المنتجات الأصلية (كما هي بدون تغيير) ---
+// ==========================================
+// قاعدة بيانات المحتوى الأصلي (بدون تغيير)
+// ==========================================
 const productsData = {
     netflix: { name: '🎬 Netflix', problems: [
         { id: 'net_1', btn: '🔐 الباسورد غلط / الحساب مقفل', title: 'الباسورد غلط أو الحساب مقفل', steps: '1. تأكد من نسخ الإيميل والباسورد بدقة بدون أي مسافات زائدة.\n2. تأكد من أنك لم تقم بتغيير أي بيانات في الحساب.\n3. إذا استمرت المشكلة، فقد يكون الحساب تحت التحديث المؤقت من المتجر.' },
@@ -29,7 +32,88 @@ const productsData = {
     ]}
 };
 
-// --- القائمة الرئيسية (بدون زر دعم) ---
+const productsList = Object.keys(productsData);
+
+// ==========================================
+// وظائف نظام التذاكر المطور
+// ==========================================
+// دالة لإعادة ضبط مؤقت الخمول
+function resetIdleTimer(userId) {
+    if (activeTickets.has(userId)) {
+        const ticket = activeTickets.get(userId);
+        // مسح المؤقت القديم
+        clearTimeout(ticket.reminderTimer);
+        clearTimeout(ticket.closeTimer);
+
+        // تنبيه بعد 5 دقائق
+        ticket.reminderTimer = setTimeout(async () => {
+            try {
+                await bot.telegram.sendMessage(userId, "⚠️ تنبيه: لم نتلقَ أي رد منك منذ 5 دقائق. سيتم إغلاق التذكرة تلقائياً بعد 5 دقائق أخرى إذا لم نتلقَ رداً.");
+                
+                // إغلاق نهائي بعد 10 دقائق إجمالاً
+                ticket.closeTimer = setTimeout(() => {
+                    closeTicketAutomatically(userId);
+                }, 5 * 60 * 1000); // 5 دقائق إضافية
+            } catch (e) { console.error(e); }
+        }, 5 * 60 * 1000); // 5 دقائق
+    }
+}
+
+// دالة إغلاق التذكرة تلقائياً
+async function closeTicketAutomatically(userId) {
+    if (activeTickets.has(userId)) {
+        const ticket = activeTickets.get(userId);
+        clearTimeout(ticket.reminderTimer);
+        clearTimeout(ticket.closeTimer);
+        
+        try {
+            // إشعار العميل
+            await bot.telegram.sendMessage(userId, `❌ تم إغلاق التذكرة (ID: ${userId}) لعدم الاستجابة.`);
+            
+            // تحديث الجروب وإضافة زر التقييم
+            const msg = `🎫 تم إغلاق التذكرة تلقائياً (ID: ${userId}).\n\nشكراً لتواصلك معنا، يرجى تقييم مستوى الدعم:`;
+            await bot.telegram.editMessageText(SUPPORT_GROUP_ID, ticket.msgId, null, msg, {
+                parse_mode: 'HTML',
+                ...Markup.inlineKeyboard([
+                    [Markup.button.callback('⭐ 1', 'rate_1'), Markup.button.callback('⭐⭐ 2', 'rate_2'), Markup.button.callback('⭐⭐⭐ 3', 'rate_3')],
+                    [Markup.button.callback('⭐⭐⭐⭐ 4', 'rate_4'), Markup.button.callback('⭐⭐⭐⭐⭐ 5', 'rate_5')]
+                ])
+            });
+        } catch (e) { console.error(e); }
+        
+        activeTickets.delete(userId);
+    }
+}
+
+// دالة إغلاق التذكرة يدوياً بواسطة الموظف
+async function closeTicketManually(targetId, adminName) {
+    if (activeTickets.has(targetId)) {
+        const ticket = activeTickets.get(targetId);
+        clearTimeout(ticket.reminderTimer);
+        clearTimeout(ticket.closeTimer);
+        
+        // إشعار العميل
+        await bot.telegram.sendMessage(targetId, `✅ تم إغلاق التذكرة بواسطة ${adminName}. نشكرك لاستخدام دعم Ustern.`);
+        
+        // تحديث الجروب وإضافة زر التقييم
+        const msg = `🎫 تم إغلاق التذكرة بواسطة ${adminName} (ID: ${targetId}).\n\nشكراً لتواصلك معنا، يرجى تقييم مستوى الدعم:`;
+        await bot.telegram.editMessageText(SUPPORT_GROUP_ID, ticket.msgId, null, msg, {
+            parse_mode: 'HTML',
+            ...Markup.inlineKeyboard([
+                [Markup.button.callback('⭐ 1', 'rate_1'), Markup.button.callback('⭐⭐ 2', 'rate_2'), Markup.button.callback('⭐⭐⭐ 3', 'rate_3')],
+                [Markup.button.callback('⭐⭐⭐⭐ 4', 'rate_4'), Markup.button.callback('⭐⭐⭐⭐⭐ 5', 'rate_5')]
+            ])
+        });
+        
+        activeTickets.delete(targetId);
+    }
+}
+
+// ==========================================
+// منطق البوت الأساسي (الرسائل والقوائم)
+// ==========================================
+
+// القائمة الرئيسية (بدون زر الدعم)
 const mainMenu = Markup.inlineKeyboard([
     [Markup.button.callback('❓ حلول المشاكل والأسئلة الشائعة', 'faq')],
     [Markup.button.callback('📖 دليل التشغيل والشروحات', 'guide')],
@@ -37,73 +121,70 @@ const mainMenu = Markup.inlineKeyboard([
     [Markup.button.callback('⚖️ شروط الاستخدام وسياسة الضمان', 'terms')]
 ]);
 
-bot.start((ctx) => ctx.reply(`👋 أهلاً بك يا ${ctx.from.first_name} في بوت Ustern!`, mainMenu));
-
-// --- منطق عرض المشاكل ---
-bot.action('faq', (ctx) => {
-    const buttons = Object.keys(productsData).map(key => [Markup.button.callback(productsData[key].name, 'prod_' + key)]);
-    ctx.editMessageText("🛍 اختار المنتج الذي تواجه مشكلة فيه:", Markup.inlineKeyboard(buttons));
+bot.start((ctx) => {
+    const firstName = ctx.from.first_name || "عزيزي المستخدم";
+    ctx.reply(`👋 أهلاً بك يا ${firstName} في بوت الدعم الذكي لـ <b>Ustern</b>!\n\n🤖 أنا هنا لمساعدتك. يرجى اختيار القسم المناسب من القائمة التالية:`, { parse_mode: 'HTML', ...mainMenu });
 });
 
-Object.keys(productsData).forEach(key => {
+// زر "حلول المشاكل"
+bot.action('faq', (ctx) => {
+    ctx.answerCbQuery();
+    const buttons = [];
+    for (let i = 0; i < productsList.length; i += 2) {
+        const row = [Markup.button.callback(productsData[productsList[i]].name, 'prod_' + productsList[i])];
+        if (productsList[i + 1]) row.push(Markup.button.callback(productsData[productsList[i + 1]].name, 'prod_' + productsList[i + 1]));
+        buttons.push(row);
+    }
+    buttons.push([Markup.button.callback('🔙 العودة للقائمة الرئيسية', 'main_menu')]);
+    ctx.editMessageText("🛍️ اختر المنتج الذي تواجه مشكلة فيه:", Markup.inlineKeyboard(buttons));
+});
+
+// العودة للقائمة الرئيسية
+bot.action('main_menu', (ctx) => {
+    ctx.answerCbQuery();
+    const firstName = ctx.from.first_name || "عزيزي المستخدم";
+    ctx.editMessageText(`👋 أهلاً بك يا ${firstName} في بوت الدعم الذكي لـ <b>Ustern</b>!\n\n🤖 أنا هنا لمساعدتك. يرجى اختيار القسم المناسب من القائمة التالية:`, { parse_mode: 'HTML', ...mainMenu });
+});
+
+// تفعيل أزرار المنتجات
+productsList.forEach(key => {
+    const prod = productsData[key];
     bot.action('prod_' + key, (ctx) => {
-        const buttons = productsData[key].problems.map(p => [Markup.button.callback(p.btn, 'err_' + p.id)]);
-        buttons.push([Markup.button.callback('🔙 العودة للمنتجات', 'faq')]);
-        ctx.editMessageText(`📺 يرجى تحديد المشكلة في ${productsData[key].name}:`, Markup.inlineKeyboard(buttons));
+        ctx.answerCbQuery();
+        const problemButtons = prod.problems.map(p => [Markup.button.callback(p.btn, 'err_' + p.id)]);
+        problemButtons.push([Markup.button.callback('🔙 العودة لاختيار المنتج', 'faq')]);
+        return ctx.editMessageText(`يرجى تحديد المشكلة في ${prod.name}:`, Markup.inlineKeyboard(problemButtons));
     });
-    productsData[key].problems.forEach(p => {
+    // تفعيل أزرار المشاكل وعرض الحل
+    prod.problems.forEach(p => {
         bot.action('err_' + p.id, (ctx) => {
-            ctx.reply(`🛠️ <b>${p.title}</b>\n\n${p.steps}`, { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('📞 لم تحل المشكلة؟ تواصل مع الدعم', 'start_support_flow')]]) });
+            ctx.answerCbQuery();
+            const txt = `🛠️ <b>حل مشكلة (${p.title}) لـ ${prod.name}:</b>\n\n${p.steps}`;
+            const buttons = { parse_mode: 'HTML', ...Markup.inlineKeyboard([
+                [Markup.button.callback('📞 لم تحل المشكلة؟ (تحدث مع الدعم)', 'human_support')]
+            ])};
+            ctx.editMessageText(txt, buttons);
         });
     });
 });
 
-// --- نظام الدعم والمحادثة ---
-bot.action('start_support_flow', (ctx) => {
-    activeTickets.set(ctx.from.id, { step: 'ASK_PHONE', chat: [] });
-    ctx.reply("يرجى إدخال رقم الواتساب الخاص بك:");
+// ==========================================
+// نظام الدعم الفني المطور (التذاكر)
+// ==========================================
+
+// العميل يطلب التحدث مع الدعم
+bot.action('human_support', (ctx) => {
+    ctx.answerCbQuery();
+    // ننتقل لخطوة جمع البيانات
+    activeTickets.set(ctx.from.id, { step: 'ASK_PHONE', chat: [], msgId: null });
+    ctx.reply("🎯 لخدمتك بشكل أسرع، يرجى كتابة رقم الواتساب الخاص بك والمشكلة بالتفصيل (يمكنك إرفاق صورة):");
 });
 
+// التعامل مع رسائل العميل والموظف
 bot.on('message', async (ctx) => {
     const userId = ctx.from.id;
-    
-    // رد الموظف من الجروب
-    if (ctx.chat.id.toString() === SUPPORT_GROUP_ID && ctx.message.reply_to_message) {
-        const match = ctx.message.reply_to_message.text.match(/ID:\s*(\d+)/);
-        if (match) {
-            const targetId = parseInt(match[1]);
-            const ticket = activeTickets.get(targetId);
-            if (ticket) {
-                ticket.chat.push(`🎧 الدعم: ${ctx.message.text || "صورة"}`);
-                await bot.telegram.sendMessage(targetId, `🎧 الدعم: ${ctx.message.text || "صورة"}`);
-                await bot.telegram.editMessageText(SUPPORT_GROUP_ID, ctx.message.reply_to_message.message_id, null, `📩 سجل المحادثة - ID: ${targetId}\n\n${ticket.chat.join('\n')}\n\n---رد بـ Reply للرد---`);
-            }
-        }
-        return;
-    }
+    const username = ctx.from.username ? `@${ctx.from.username}` : "لا يوجد";
+    const firstName = ctx.from.first_name;
 
-    // استكمال بيانات العميل أو المحادثة
-    if (activeTickets.has(userId)) {
-        const ticket = activeTickets.get(userId);
-        if (ticket.step === 'ASK_PHONE') {
-            ticket.phone = ctx.message.text;
-            ticket.step = 'ACTIVE';
-            ctx.reply("شكراً. الآن أرسل وصفاً لمشكلتك (يمكنك إرفاق صورة):");
-        } else {
-            const msg = ctx.message.text || ctx.message.caption || "صورة";
-            ticket.chat.push(`👤 ${ctx.from.first_name}: ${msg}`);
-            
-            if (!ticket.msgId) {
-                const sentMsg = await bot.telegram.sendMessage(SUPPORT_GROUP_ID, `📩 سجل المحادثة - ID: ${userId}\n\n👤 ${ctx.from.first_name}\n📱 واتساب: ${ticket.phone}\n📝 ${msg}\n\n---رد بـ Reply للرد---`);
-                ticket.msgId = sentMsg.message_id;
-            } else {
-                await bot.telegram.editMessageText(SUPPORT_GROUP_ID, ticket.msgId, null, `📩 سجل المحادثة - ID: ${userId}\n\n${ticket.chat.join('\n')}\n\n---رد بـ Reply للرد---`);
-            }
-            ctx.reply("✅ تم إرسال رسالتك.");
-        }
-    }
-});
-
-bot.launch();
-const express = require("express");
-express().listen(3000);
+    // 1. رد الموظف في الجروب
+    if (ctx.chat.id.toString() === SUPPORT_GROUP_
