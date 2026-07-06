@@ -2,7 +2,7 @@ const { Telegraf, Markup } = require('telegraf');
 
 
 // التوكن الحقيقي بتاعك مدمج وجاهز
-const bot = new Telegraf('8892358205:AAGH4t_I2Mk7eBANZ0_z8fTkmKj4xqxTs6c');
+const bot = new Telegraf('8892358205:AAHVe-QrqCVc5yZAUpNGUWbfm6hhQJd7SE4');
 
 
 // ==========================================
