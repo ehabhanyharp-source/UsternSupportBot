@@ -117,4 +117,7 @@ bot.on('message', async (ctx) => {
                 } catch(e) {}
             }
         }
-    } catch (err) { console.error
+    } catch (err) { console.error("Error:", err); }
+});
+
+bot.launch().catch(e => console.error("Launch Error:", e));
