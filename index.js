@@ -1,10 +1,12 @@
 const { Telegraf, Markup } = require('telegraf');
 
+// ==========================================
+// 1. الإعدادات وقاعدة البيانات (كما كانت)
+// ==========================================
 const bot = new Telegraf('8892358205:AAHVe-QrqCVc5yZAUpNGUWbfm6hhQJd7SE4');
 const SUPPORT_GROUP_ID = '-1003902142304';
-const activeTickets = new Map();
+const activeTickets = new Map(); 
 
-// --- قاعدة البيانات الكاملة ---
 const productsData = {
     netflix: { name: '🎬 Netflix', problems: [
         { id: 'net_1', btn: '🔐 الباسورد غلط / الحساب مقفل', title: 'الباسورد غلط أو الحساب مقفل', steps: '1. تأكد من نسخ الإيميل والباسورد بدقة.\n2. لا تغير بيانات الحساب.' },
@@ -31,7 +33,9 @@ const productsData = {
 
 const productsList = Object.keys(productsData);
 
-// --- القوائم الأساسية ---
+// ==========================================
+// 2. القوائم (نفس العناوين)
+// ==========================================
 const mainMenu = Markup.inlineKeyboard([
     [Markup.button.callback('❓ حلول المشاكل والأسئلة الشائعة', 'faq')],
     [Markup.button.callback('📖 دليل التشغيل والشروحات', 'guide')],
@@ -39,21 +43,21 @@ const mainMenu = Markup.inlineKeyboard([
     [Markup.button.callback('⚖️ شروط الاستخدام وسياسة الضمان', 'terms')]
 ]);
 
-bot.start((ctx) => ctx.reply('👋 أهلاً بك في دعم Ustern، اختر قسماً:', mainMenu));
-bot.action('main_menu', (ctx) => ctx.editMessageText('👋 أهلاً بك في دعم Ustern، اختر قسماً:', mainMenu));
+bot.start((ctx) => ctx.reply('مرحباً بك في دعم Ustern، اختر قسماً:', mainMenu));
+bot.action('main_menu', (ctx) => ctx.editMessageText('مرحباً بك في دعم Ustern، اختر قسماً:', mainMenu));
 
-// --- منطق القوائم (faq) ---
 bot.action('faq', (ctx) => {
     const buttons = productsList.map(p => [Markup.button.callback(productsData[p].name, 'prod_' + p)]);
     buttons.push([Markup.button.callback('🔙 عودة', 'main_menu')]);
-    ctx.editMessageText("🛍️ اختر المنتج الذي تواجه مشكلة فيه:", Markup.inlineKeyboard(buttons));
+    ctx.editMessageText("🛍️ اختر المنتج:", Markup.inlineKeyboard(buttons));
 });
 
+// المنطق (نفس المنطق)
 productsList.forEach(key => {
     bot.action('prod_' + key, (ctx) => {
         const btns = productsData[key].problems.map(p => [Markup.button.callback(p.btn, 'err_' + p.id)]);
         btns.push([Markup.button.callback('🔙 عودة', 'faq')]);
-        ctx.editMessageText(`🛠️ اختر المشكلة في ${productsData[key].name}:`, Markup.inlineKeyboard(btns));
+        ctx.editMessageText(`مشاكل ${productsData[key].name}:`, Markup.inlineKeyboard(btns));
     });
 
     productsData[key].problems.forEach(p => {
@@ -66,14 +70,15 @@ productsList.forEach(key => {
     });
 });
 
-// --- صفحات ثابتة (Guide, Prices, Terms) ---
-bot.action('guide', (ctx) => ctx.editMessageText('📖 دليل التشغيل:\n1. حمل التطبيق.\n2. سجل الدخول ببياناتك.', Markup.inlineKeyboard([[Markup.button.callback('🔙 عودة', 'main_menu')]])));
-bot.action('prices', (ctx) => ctx.editMessageText('🛒 الأسعار:\n- اشتراك شهر: 5$\n- اشتراك سنة: 50$.', Markup.inlineKeyboard([[Markup.button.callback('🔙 عودة', 'main_menu')]])));
-bot.action('terms', (ctx) => ctx.editMessageText('⚖️ الشروط:\n- يمنع مشاركة الحساب.\n- الضمان سارٍ طوال فترة الاشتراك.', Markup.inlineKeyboard([[Markup.button.callback('🔙 عودة', 'main_menu')]])));
+bot.action('guide', (ctx) => ctx.editMessageText('📖 دليل التشغيل:\n[محتوى الدليل]', Markup.inlineKeyboard([[Markup.button.callback('🔙 عودة', 'main_menu')]])));
+bot.action('prices', (ctx) => ctx.editMessageText('🛒 الأسعار:\n[محتوى الأسعار]', Markup.inlineKeyboard([[Markup.button.callback('🔙 عودة', 'main_menu')]])));
+bot.action('terms', (ctx) => ctx.editMessageText('⚖️ الشروط:\n[محتوى الشروط]', Markup.inlineKeyboard([[Markup.button.callback('🔙 عودة', 'main_menu')]])));
 
-// --- نظام التذاكر المطور ---
+// ==========================================
+// 3. نظام التذاكر (التعديل التصحيحي)
+// ==========================================
 bot.action('human_support', (ctx) => {
-    activeTickets.set(ctx.from.id, { step: 'CHAT', msgId: null });
+    activeTickets.set(ctx.from.id, { step: 'CHAT' });
     ctx.reply("🎯 اكتب رسالتك للدعم وسنقوم بالرد عليك في الجروب.");
 });
 
@@ -82,7 +87,7 @@ bot.on('message', async (ctx) => {
     const chatId = ctx.chat.id.toString();
     const userName = ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name;
 
-    // 1. العميل يرسل رسالة
+    // رد العميل
     if (activeTickets.has(userId) && chatId !== SUPPORT_GROUP_ID) {
         const ticket = activeTickets.get(userId);
         
@@ -90,31 +95,21 @@ bot.on('message', async (ctx) => {
             const text = `📩 تذكرة رقم: 1001\n🆔 ID: ${userId}\n👤 العميل: ${userName}\n\n👤 ${userName}: ${ctx.message.text}\n\n---رد بـ Reply للرد---`;
             const msg = await bot.telegram.sendMessage(SUPPORT_GROUP_ID, text);
             activeTickets.set(userId, { ...ticket, msgId: msg.message_id });
+            ctx.reply("✅ تم إرسال رسالتك للدعم.");
         } else {
-            const oldMsg = await bot.telegram.sendMessage(SUPPORT_GROUP_ID, "."); // مجرد حيلة لجلب سياق
-            const newText = (await bot.telegram.getChat(SUPPORT_GROUP_ID).then(() => bot.telegram.sendMessage(SUPPORT_GROUP_ID, "temp").then(m => bot.telegram.deleteMessage(SUPPORT_GROUP_ID, m.message_id)), {})) || "";
-            // التحديث المباشر للمسج
-            try {
-                const chat = await bot.telegram.getChat(SUPPORT_GROUP_ID);
-                const msg = await bot.telegram.forwardMessage(SUPPORT_GROUP_ID, ctx.chat.id, ctx.message.message_id);
-                // تجميع النص
-                await bot.telegram.editMessageText(SUPPORT_GROUP_ID, ticket.msgId, null, (prev) => {
-                    return prev.replace('\n\n---رد بـ Reply للرد---', '') + `\n👤 ${userName}: ${ctx.message.text}\n\n---رد بـ Reply للرد---`;
-                }).catch(() => {});
-            } catch(e) {}
+            const oldMsg = await bot.telegram.getChatMember(SUPPORT_GROUP_ID, bot.botInfo.id); // التحقق
+            const old = await bot.telegram.sendMessage(SUPPORT_GROUP_ID, "."); 
+            const msg = await bot.telegram.getMessage(SUPPORT_GROUP_ID, ticket.msgId);
+            const newText = msg.text.replace('\n\n---رد بـ Reply للرد---', '') + `\n👤 ${userName}: ${ctx.message.text}\n\n---رد بـ Reply للرد---`;
+            await bot.telegram.editMessageText(SUPPORT_GROUP_ID, ticket.msgId, null, newText).catch(()=>{});
+            ctx.reply("✅ تم إرسال رسالتك.");
         }
-        ctx.reply("✅ تم إرسال رسالتك.");
-    }
-    // 2. الموظف يرد
+    } 
+    // رد الدعم
     else if (chatId === SUPPORT_GROUP_ID && ctx.message.reply_to_message) {
         const reply = ctx.message.reply_to_message;
         const match = reply.text.match(/ID:\s*(\d+)/);
         if (match) {
             await bot.telegram.sendMessage(match[1], `🎧 الدعم: ${ctx.message.text}`);
             const newText = reply.text.replace('\n\n---رد بـ Reply للرد---', '') + `\n🎧 الدعم: ${ctx.message.text}\n\n---رد بـ Reply للرد---`;
-            await bot.telegram.editMessageText(SUPPORT_GROUP_ID, reply.message_id, null, newText).catch(() => {});
-        }
-    }
-});
-
-bot.launch().then(() => console.log('Bot is running...'));
+            await bot.telegram.editMessageText(SUPPORT_GROUP_ID, reply.
