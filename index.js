@@ -4,7 +4,7 @@ const { Telegraf, Markup } = require('telegraf');
 // إعدادات البوت والجروب (ضع ID الجروب الخاص بك هنا)
 // ==========================================
 const bot = new Telegraf('8892358205:AAHVe-QrqCVc5yZAUpNGUWbfm6hhQJd7SE4');
-const SUPPORT_GROUP_ID = '-100xxxxxxxxx'; // <--- ضع ID الجروب هنا
+const SUPPORT_GROUP_ID = '-1003902142304'; // <--- ضع ID الجروب هنا
 const activeTickets = new Map(); // لتتبع المحادثات المفتوحة
 
 // ==========================================
