@@ -1,12 +1,11 @@
 const { Telegraf, Markup } = require('telegraf');
 
-// التوكن الخاص بك
 const bot = new Telegraf('8892358205:AAHVe-QrqCVc5yZAUpNGUWbfm6hhQJd7SE4');
 const SUPPORT_GROUP_ID = '-1003902142304'; 
 const activeTickets = new Map(); 
 
 // ==========================================
-// قاعدة بيانات المنتجات (محتواك الأصلي)
+// قاعدة بيانات المحتوى الأصلي بالكامل
 // ==========================================
 const productsData = {
     netflix: { name: '🎬 Netflix', problems: [
@@ -35,96 +34,92 @@ const productsData = {
 const productsList = Object.keys(productsData);
 
 // ==========================================
-// وظائف المساعدة لنظام التذاكر
+// وظائف التذاكر (التوقيتات: 5 دقائق تنبيه، 10 دقائق إغلاق)
 // ==========================================
-function getQueuePosition(userId) {
-    const keys = Array.from(activeTickets.keys());
-    return keys.indexOf(userId) + 1;
-}
-
 function resetTicketTimer(userId) {
     if (activeTickets.has(userId)) {
         const ticket = activeTickets.get(userId);
-        clearTimeout(ticket.timer);
+        if (ticket.timer) clearTimeout(ticket.timer);
         
-        // تنبيه بعد 10 دقائق من الخمول
         ticket.timer = setTimeout(async () => {
             try {
-                await bot.telegram.sendMessage(userId, "⚠️ **تنبيه:** لم نتلقَ أي رد منك منذ 10 دقائق. سيتم إغلاق التذكرة تلقائياً بعد دقيقة واحدة إذا لم نتلقَ رداً.");
-                
+                await bot.telegram.sendMessage(userId, "⚠️ تنبيه: لم يصلنا رد منك منذ 5 دقائق. سيتم إغلاق التذكرة تلقائياً بعد 5 دقائق أخرى إذا لم يتم الرد.");
                 ticket.timer = setTimeout(() => {
-                    bot.telegram.sendMessage(userId, "❌ تم إغلاق التذكرة لعدم الاستجابة.");
-                    activeTickets.delete(userId);
-                }, 60 * 1000); // دقيقة إضافية
+                    if (activeTickets.has(userId)) {
+                        bot.telegram.sendMessage(userId, "❌ تم إغلاق التذكرة تلقائياً.");
+                        activeTickets.delete(userId);
+                    }
+                }, 5 * 60 * 1000); 
             } catch (e) { console.error(e); }
-        }, 10 * 60 * 1000); // 10 دقائق
+        }, 5 * 60 * 1000); 
     }
 }
 
 // ==========================================
-// منطق البوت الأساسي
+// منطق البوت
 // ==========================================
 bot.start((ctx) => {
-    const firstName = ctx.from.first_name || "عزيزي المستخدم";
-    const welcomeMessage = `👋 أهلاً بك يا ${firstName} في بوت الدعم الذكي لـ <b>Ustern</b>!\n\n🤖 أنا هنا لمساعدتك فوراً. يرجى اختيار القسم المناسب:`;
-    ctx.reply(welcomeMessage, { parse_mode: 'HTML', ...Markup.inlineKeyboard([
-        [Markup.button.callback('❓ حلول المشاكل والأسئلة الشائعة', 'faq')],
+    ctx.reply(`👋 أهلاً بك يا ${ctx.from.first_name} في بوت Ustern!`, Markup.inlineKeyboard([
+        [Markup.button.callback('❓ حلول المشاكل', 'faq')],
         [Markup.button.callback('🎧 تحدث مع الدعم', 'human_support')]
-    ])});
+    ]));
 });
 
 bot.action('faq', (ctx) => {
     ctx.answerCbQuery();
-    const buttons = [];
-    for (let i = 0; i < productsList.length; i += 2) {
-        const row = [Markup.button.callback(productsData[productsList[i]].name, 'prod_' + productsList[i])];
-        if (productsList[i + 1]) row.push(Markup.button.callback(productsData[productsList[i + 1]].name, 'prod_' + productsList[i + 1]));
-        buttons.push(row);
-    }
-    return ctx.reply("🛍️ اختر المنتج الذي تواجه مشكلة فيه:", Markup.inlineKeyboard(buttons));
+    const buttons = productsList.map(key => [Markup.button.callback(productsData[key].name, 'prod_' + key)]);
+    buttons.push([Markup.button.callback('🔙 رجوع', 'back_home')]);
+    ctx.editMessageText("اختر المنتج:", Markup.inlineKeyboard(buttons));
 });
 
+bot.action('back_home', (ctx) => {
+    ctx.answerCbQuery();
+    ctx.editMessageText(`👋 أهلاً بك يا ${ctx.from.first_name} في بوت Ustern!`, Markup.inlineKeyboard([
+        [Markup.button.callback('❓ حلول المشاكل', 'faq')],
+        [Markup.button.callback('🎧 تحدث مع الدعم', 'human_support')]
+    ]));
+});
+
+// تفعيل أزرار المنتجات والمشاكل
 productsList.forEach(key => {
-    const prod = productsData[key];
     bot.action('prod_' + key, (ctx) => {
         ctx.answerCbQuery();
-        const problemButtons = prod.problems.map(p => [Markup.button.callback(p.btn, 'err_' + p.id)]);
-        return ctx.reply(`يرجى تحديد المشكلة في ${prod.name}:`, Markup.inlineKeyboard(problemButtons));
+        const prod = productsData[key];
+        const buttons = prod.problems.map(p => [Markup.button.callback(p.btn, 'err_' + p.id)]);
+        buttons.push([Markup.button.callback('🔙 رجوع', 'faq')]);
+        ctx.editMessageText(`اختر مشكلة ${prod.name}:`, Markup.inlineKeyboard(buttons));
     });
-    prod.problems.forEach(p => {
+    productsData[key].problems.forEach(p => {
         bot.action('err_' + p.id, (ctx) => {
             ctx.answerCbQuery();
-            const txt = `🛠️ <b>حل مشكلة (${p.title}) لـ ${prod.name}:</b>\n\n${p.steps}`;
-            const extraButtons = { parse_mode: 'HTML', ...Markup.inlineKeyboard([
-                [Markup.button.callback('📞 لم تحل المشكلة (تحدث مع الدعم)', 'human_support')]
-            ])};
-            p.image ? ctx.replyWithPhoto(p.image, { caption: txt, ...extraButtons }) : ctx.reply(txt, extraButtons);
+            const txt = `🛠️ <b>${p.title}</b>\n\n${p.steps}`;
+            const btns = Markup.inlineKeyboard([
+                [Markup.button.callback('📞 تحدث مع الدعم', 'human_support')],
+                [Markup.button.callback('⬅️ رجوع', 'prod_' + key)]
+            ]);
+            p.image ? ctx.replyWithPhoto(p.image, { caption: txt, ...btns, parse_mode: 'HTML' }) : ctx.reply(txt, { ...btns, parse_mode: 'HTML' });
         });
     });
 });
 
-// ==========================================
-// نظام التذاكر (التنفيذ)
-// ==========================================
+// نظام الدعم (التذاكر)
 bot.action('human_support', (ctx) => {
     ctx.answerCbQuery();
     activeTickets.set(ctx.from.id, { messages: [], timer: null });
     resetTicketTimer(ctx.from.id);
-    const pos = getQueuePosition(ctx.from.id);
-    ctx.reply(`🎯 تم فتح تذكرة دعم.\n🔢 رقمك في قائمة الانتظار: ${pos}\n\nأرسل مشكلتك بالتفصيل وسنتابع معك:`, Markup.inlineKeyboard([Markup.button.callback('❌ إنهاء المحادثة', 'end_chat')]));
+    ctx.reply("🎯 تم فتح تذكرة دعم. اكتب مشكلتك:", Markup.inlineKeyboard([Markup.button.callback('❌ إنهاء المحادثة', 'end_chat')]));
 });
 
 bot.action('end_chat', (ctx) => {
     ctx.answerCbQuery();
     activeTickets.delete(ctx.from.id);
-    ctx.reply("✅ تم إنهاء المحادثة بنجاح.");
+    ctx.reply("✅ تم إنهاء المحادثة.");
 });
 
 bot.on('message', async (ctx) => {
     const userId = ctx.from?.id;
     const username = ctx.from.username ? `@${ctx.from.username}` : "لا يوجد";
 
-    // رد الموظف في الجروب
     if (ctx.chat.id.toString() === SUPPORT_GROUP_ID && ctx.message.reply_to_message) {
         const match = (ctx.message.reply_to_message.text || "").match(/ID: (\d+)/);
         if (match) {
@@ -133,21 +128,15 @@ bot.on('message', async (ctx) => {
                 activeTickets.get(targetId).messages.push(`🎧 الدعم: ${ctx.message.text || "صورة"}`);
                 resetTicketTimer(targetId);
                 if (ctx.message.text) await bot.telegram.sendMessage(targetId, `🎧 رد الدعم: ${ctx.message.text}`);
-                else if (ctx.message.photo) await bot.telegram.sendPhoto(targetId, ctx.message.photo.slice(-1)[0].file_id, { caption: ctx.message.caption });
             }
             ctx.reply("✅ تم الرد.");
         }
-    } 
-    // رسالة العميل
-    else if (userId && activeTickets.has(userId)) {
+    } else if (userId && activeTickets.has(userId)) {
         resetTicketTimer(userId);
         const ticket = activeTickets.get(userId);
         ticket.messages.push(`👤 ${ctx.from.first_name}: ${ctx.message.text || "صورة"}`);
-        
-        const msg = `📩 <b>تذكرة جديدة - ID: ${userId}</b>\n👤 العميل: ${ctx.from.first_name}\n🏷 اليوزر: ${username}\n\n${ticket.messages.join('\n')}\n\n---رد بـ Reply للرد على العميل---`;
-        
-        if (ctx.message.text) await bot.telegram.sendMessage(SUPPORT_GROUP_ID, msg, { parse_mode: 'HTML' });
-        else if (ctx.message.photo) await bot.telegram.sendPhoto(SUPPORT_GROUP_ID, ctx.message.photo.slice(-1)[0].file_id, { caption: msg, parse_mode: 'HTML' });
+        const msg = `📩 <b>تذكرة - ID: ${userId}</b>\n👤: ${ctx.from.first_name}\n🏷 اليوزر: ${username}\n\n${ticket.messages.join('\n')}\n\n---رد بـ Reply للرد---`;
+        await bot.telegram.sendMessage(SUPPORT_GROUP_ID, msg, { parse_mode: 'HTML' });
         ctx.reply("✅ تم إرسال رسالتك.");
     }
 });
