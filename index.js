@@ -4,7 +4,7 @@ const { Telegraf, Markup } = require('telegraf');
 // 1. کنفیگریشن اور ڈیٹا بیس
 // ==========================================
 
-// ٹوکن کو براہ راست یہاں لکھنا ٹیسٹنگ کے لیے آسان ہے، لیکن پروڈکشن میں .env فائل بہتر ہے۔
+// اپنے بوٹ کا ٹوکن یہاں ڈالیں (اگر یہ پہلے سے موجود ہے تو اسے رہنے دیں)
 const bot = new Telegraf('8892358205:AAHVe-QrqCVc5yZAUpNGUWbfm6hhQJd7SE4');
 const SUPPORT_GROUP_ID = '-1003902142304';
 const activeTickets = new Map(); // Map<userId, { step, clientName, clientPhone, chat: [], msgId }>
@@ -107,7 +107,7 @@ async function closeTicketByClient(userId) {
 }
 
 // ==========================================
-// 3. منطق القوائم والأزرار
+// 3. منطق القوائم والأزرار الأساسية
 // ==========================================
 
 const mainMenu = Markup.inlineKeyboard([
@@ -143,7 +143,7 @@ bot.action('faq', (ctx) => {
 });
 
 // ==========================================
-// 4. منطق المنتجات والمشاكل (بدون تغيير)
+// 4. منطق المنتجات والمشاكل (الأصلي بدون تغيير)
 // ==========================================
 
 productsList.forEach(key => {
@@ -202,7 +202,10 @@ bot.action(/rate_(.+)/, async (ctx) => {
     await ctx.editMessageText(`🎫 شكراً لتواصلك معنا، تم تقييم مستوى الدعم: <b>${rate} ⭐</b>`, { parse_mode: 'HTML' });
 });
 
-// التعامل مع رسائل العميل والموظف (المحادثة المستمرة)
+// ==========================================
+// 6. معالج الرسائل الرئيسي (القلب النابض)
+// ==========================================
+
 bot.on('message', async (ctx) => {
     const userId = ctx.from.id;
     const chatId = ctx.chat.id.toString();
@@ -212,8 +215,9 @@ bot.on('message', async (ctx) => {
     // 1. رد الموظف في الجروب
     if (chatId === SUPPORT_GROUP_ID && ctx.message.reply_to_message) {
         const replyText = ctx.message.reply_to_message.text;
-        const match = replyText.match(/ID: (\d+)/);
+        // استخراج ID العميل من رسالة التذكرة الأصلية
+        const match = replyText.match(/ID:\s*(\d+)/);
         if (match) {
             const targetId = parseInt(match[1]);
             const ticket = activeTickets.get(targetId);
-            if
+            if (ticket) {
