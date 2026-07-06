@@ -1,12 +1,14 @@
 const { Telegraf, Markup } = require('telegraf');
 
-
-// التوكن الحقيقي بتاعك مدمج وجاهز
+// ==========================================
+// إعدادات البوت والجروب (ضع ID الجروب الخاص بك هنا)
+// ==========================================
 const bot = new Telegraf('8892358205:AAHVe-QrqCVc5yZAUpNGUWbfm6hhQJd7SE4');
-
+const SUPPORT_GROUP_ID = '-100xxxxxxxxx'; // <--- ضع ID الجروب هنا
+const activeTickets = new Map(); // لتتبع المحادثات المفتوحة
 
 // ==========================================
-// قاعدة بيانات المشاكل والحلول الشاملة (HTML تليجرام) كما هي
+// قاعدة بيانات المشاكل والحلول (كما هي)
 // ==========================================
 const productsData = {
     netflix: {
@@ -47,181 +49,58 @@ const productsData = {
 const productsList = Object.keys(productsData);
 
 // ==========================================
-// الواجهة الرئيسية (Main Keyboard)
+// منطق البوت (الأساسيات والدعم البشري)
 // ==========================================
+
 bot.start((ctx) => {
     const firstName = ctx.from.first_name || "عزيزي المستخدم";
     const welcomeMessage = `👋 أهلاً بك يا ${firstName} في بوت الدعم الذكي لـ <b>Ustern</b>!\n\n🤖 أنا هنا لمساعدتك فوراً. يرجى اختيار القسم المناسب:`;
-
-    ctx.reply("🔄 جاري تهيئة البوت الذكي...", { reply_markup: { remove_keyboard: true } }).then(() => {
-        return ctx.reply(welcomeMessage, {
-            parse_mode: 'HTML',
-            ...Markup.inlineKeyboard([
-                [Markup.button.callback('❓ حلول المشاكل والأسئلة الشائعة', 'faq')],
-                [Markup.button.callback('📖 دليل التشغيل والشروحات', 'guides')],
-                [Markup.button.callback('🛒 أسعار الاشتراكات وطرق الدفع', 'pricing')],
-                [Markup.button.callback('⚖️ شروط الاستخدام وسياسة الضمان', 'terms')]
-            ])
-        });
-    });
-});
-
-// قائمة المنتجات في قسم حلول المشاكل
-bot.action('faq', (ctx) => {
-    ctx.answerCbQuery();
-    const buttons = [];
-    for (let i = 0; i < productsList.length; i += 2) {
-        const row = [Markup.button.callback(productsData[productsList[i]].name, 'prod_' + productsList[i])];
-        if (productsList[i + 1]) {
-            row.push(Markup.button.callback(productsData[productsList[i + 1]].name, 'prod_' + productsList[i + 1]));
-        }
-        buttons.push(row);
-    }
-    buttons.push([Markup.button.callback('🔙 العودة للرئيسية', 'back_home')]);
-    return ctx.reply("🛍️ اختر المنتج الذي تواجه مشكلة فيه لعرض الحلول فوراً:", Markup.inlineKeyboard(buttons));
-});
-
-// توليد أزرار المشاكل والردود عليها تلقائياً
-productsList.forEach(key => {
-    const prod = productsData[key];
-
-    bot.action('prod_' + key, (ctx) => {
-        ctx.answerCbQuery();
-        const problemButtons = prod.problems.map(p => [Markup.button.callback(p.btn, 'err_' + p.id)]);
-        problemButtons.push([Markup.button.callback('🔙 العودة للمنتجات', 'faq')]);
-        return ctx.reply(`يرجى تحديد المشكلة المحددة التي تواجهها في ${prod.name}:`, Markup.inlineKeyboard(problemButtons));
-    });
-
-    prod.problems.forEach(p => {
-        bot.action('err_' + p.id, (ctx) => {
-            ctx.answerCbQuery();
-            const txt = `🛠️ <b>حل مشكلة (${p.title}) لـ ${prod.name}:</b>\n\n${p.steps}\n\n💡 إذا قمت بتطبيق الخطوات ولم تُحل المشكلة، يمكنك التحدث مع الموظف المختص:`;
-            
-            const extraButtons = {
-                parse_mode: 'HTML',
-                ...Markup.inlineKeyboard([
-                    [Markup.button.callback('📞 لم تحل المشكلة (تحدث مع الدعم)', 'human_support')],
-                    [Markup.button.callback('⬅️ العودة لمشاكل المنتج', 'prod_' + key)]
-                ])
-            };
-
-            if (p.image) {
-                return ctx.replyWithPhoto(p.image, { caption: txt, ...extraButtons });
-            } else {
-                return ctx.reply(txt, extraButtons);
-            }
-        });
-    });
-});
-
-// ==========================================
-// دليل التشغيل والشروحات تلقائياً
-// ==========================================
-bot.action('guides', (ctx) => {
-    ctx.answerCbQuery();
-    const buttons = [];
-    for (let i = 0; i < productsList.length; i += 2) {
-        const row = [Markup.button.callback(productsData[productsList[i]].name, 'guide_' + productsList[i])];
-        if (productsList[i + 1]) {
-            row.push(Markup.button.callback(productsData[productsList[i + 1]].name, 'guide_' + productsList[i + 1]));
-        }
-        buttons.push(row);
-    }
-    buttons.push([Markup.button.callback('🔙 العودة للرئيسية', 'back_home')]);
-    return ctx.reply("📖 <b>اختر المنتج الذي تريد عرض شروحات التشغيل الخاصة به:</b>", Markup.inlineKeyboard(buttons));
-});
-
-productsList.forEach(key => {
-    bot.action('guide_' + key, (ctx) => {
-        ctx.answerCbQuery();
-        return ctx.reply(`📖 <b>قائمة شروحات ${productsData[key].name}:</b>\nاختر الشرح المحدّد الذي تحتاجه:`, Markup.inlineKeyboard([
-            [Markup.button.callback('📱 طريقة تسجيل الدخول الصحيحة', key + '_g_login')],
-            [Markup.button.callback('🎬 طريقة رفع الجودة والوضوح', key + '_g_quality')],
-            [Markup.button.callback('🌐 طريقة تغيير اللغة والترجمة', key + '_g_lang')],
-            [Markup.button.callback('🔙 العودة لقائمة الشروحات', 'guides')]
-        ]));
-    });
-
-    bot.action(key + '_g_login', (ctx) => {
-        ctx.answerCbQuery();
-        const txt = `📱 <b>طريقة تسجيل الدخول لـ ${productsData[key].name}:</b>\n\n1. افتح التطبيق أو الموقع الرسمي الخاص بالمنصة.\n2. اكتب الحساب والرمز السري بدقة بدون مسافات إضافية.\n3. ادخل على الشاشة أو الحساب المخصص لك من قِبل متجرنا فقط.`;
-        return ctx.reply(txt, { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ العودة لشروحات المنتج', 'guide_' + key)]]) });
-    });
-
-    bot.action(key + '_g_quality', (ctx) => {
-        ctx.answerCbQuery();
-        const txt = `🎬 <b>طريقة رفع الجودة والوضوح لـ ${productsData[key].name}:</b>\n\n1. توجه إلى قائمة الإعدادات (Settings) داخل الحساب.\n2. اختر إعدادات تشغيل الفيديو والجودة (Playback quality).\n3. اجعل الخيار على الأعلى دائماً (High / Ultra HD / 4K) لضمان أفضل تجربة.`;
-        return ctx.reply(txt, { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ العودة لشروحات المنتج', 'guide_' + key)]]) });
-    });
-
-    bot.action(key + '_g_lang', (ctx) => {
-        ctx.answerCbQuery();
-        const txt = `🌐 <b>طريقة تغيير اللغة والترجمة لـ ${productsData[key].name}:</b>\n\n1. من إعدادات الملف الشخصي (Profile settings)، ابحث عن لغة العرض (Display Language).\n2. اختر اللغة العربية أو الإنجليزية واضغط حفظ.\n3. أثناء تشغيل أي فيديو، اضغط على علامة الصوت والترجمة لتفعيل الترجمة العربية المدمجة تلقائياً.`;
-        return ctx.reply(txt, { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ العودة لشروحات المنتج', 'guide_' + key)]]) });
-    });
-});
-
-// ==========================================
-// السياسة والشروط المحدثة بنظام الـ HTML الصارم لـ Ustern
-// ==========================================
-bot.action('pricing', (ctx) => { 
-    ctx.answerCbQuery(); 
-    return ctx.reply("🛒 <b>قائمة الأسعار وطرق الدفع بـ Ustern:</b>\n\n- اشتراك Netflix شهري: (اكتب السعر)\n- اشتراك Shahid VIP شهري: (اكتب السعر)\n- بقية الاشتراكات متوفرة بأفضل الأسعار الممكنة!\n\n💳 طرق الدفع المتوفرة: فودافون كاش، إنستا باي، بطاقات بنكية.", { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('🔙 العودة للرئيسية', 'back_home')]]) }); 
-});
-
-bot.action('terms', (ctx) => { 
-    ctx.answerCbQuery(); 
-    const termsTxt = "⚖️ <b>سياسة الاستبدال، الإسترجاع، والضمان لمتجر Ustern:</b>\n\n" +
-                     "🛑 <b>1. طبيعة المنتجات الرقمية (منع الاسترجاع أو الاستبدال):</b>\n" +
-                     "• نظرًا لأن جميع الخدمات والسلع المقدمة في متجرنا هي منتجات رقمية واشتراكات فورية يُكشف عنها بمجرد التسليم، فإنه لا يُسمح بالاستبدال أو الاسترجاع النقدي نهائيًا.\n" +
-                     "• ⚠️ <b>تنبيه هام جداً:</b> لا يحق للعميل إلغاء الطلب أو استرجاع الأموال مطلقاً حتى لو كانت حالة الطلب لسه <b>(قيد التجهيز)</b> أو <b>(قيد التنفيذ)</b> في الموقع طالما تم البدء في معالجة طلبك.\n\n" +
-                     "🤝 <b>2. سياسة الضمان والتعويض الذكي (حقوق العميل):</b>\n" +
-                     "• يحق للعميل طلب التعويض الكامل في نفس الخدمة أو المنتج في حالة وجود أي مشاكل فنية أو تقنية تمنعه من استخدام الحساب، وسيتم تسليمه حساب بديل فوراً طوال فترة الضمان الفني المتفق عليها.\n" +
-                     "• في حال تعذر إصلاح المشكلة تماماً من طرفنا، يتم تعويض العميل بمنتج آخر يعادله أو رد قيمة مادية متبقية متوافقة مع فترة الاشتراك.\n\n" +
-                     "❌ <b>3. حالات تسقط حق العميل في التعويض والضمان:</b>\n" +
-                     "• يمنع تماماً تغيير البيانات الأساسية للحساب المشترك (الإيميل، الرمز السري).\n" +
-                     "• الالتزام الكامل بالشاشة المحددة لك ودخول جهاز واحد فقط، ومخالفة الشروط تلغي الضمان تلقائياً بدون تعويض.";
-                     
-    return ctx.reply(termsTxt, {
+    return ctx.reply(welcomeMessage, {
         parse_mode: 'HTML',
-        ...Markup.inlineKeyboard([[Markup.button.callback('🔙 العودة للرئيسية', 'back_home')]])
-    }); 
+        ...Markup.inlineKeyboard([
+            [Markup.button.callback('❓ حلول المشاكل والأسئلة الشائعة', 'faq')],
+            [Markup.button.callback('📖 دليل التشغيل والشروحات', 'guides')],
+            [Markup.button.callback('🛒 أسعار الاشتراكات وطرق الدفع', 'pricing')],
+            [Markup.button.callback('⚖️ شروط الاستخدام وسياسة الضمان', 'terms')]
+        ])
+    });
 });
 
-// أزرار العودة والدعم البشري
-bot.action('back_home', (ctx) => {
-    ctx.answerCbQuery(); ctx.deleteMessage();
-    return ctx.reply("🔙 أهلاً بك مجدداً في القائمة الرئيسية:", Markup.inlineKeyboard([
-        [Markup.button.callback('❓ حلول المشاكل والأسئلة الشائعة', 'faq')],
-        [Markup.button.callback('📖 دليل التشغيل والشروحات', 'guides')],
-        [Markup.button.callback('🛒 أسعار الاشتراكات وطرق الدفع', 'pricing')],
-        [Markup.button.callback('⚖️ شروط الاستخدام وسياسة الضمان', 'terms')]
-    ]));
-});
-
+// التعامل مع الدعم البشري والردود
 bot.action('human_support', (ctx) => {
     ctx.answerCbQuery();
-    return ctx.reply("🎯 <b>تم تحويلك للدعم البشري بـ Ustern:</b>\n\nيرجى كتابة مشكلتك بالتفصيل في رسالة واحدة هنا، وسيقوم الموظف المختص بالرد عليك فوراً للاستبدال أو التعويض. ⏳", { parse_mode: 'HTML' });
+    activeTickets.set(ctx.from.id, { name: ctx.from.first_name });
+    return ctx.reply("🎯 <b>تم تفعيل وضع الدعم البشري:</b>\n\nيرجى كتابة مشكلتك الآن في رسالة واحدة، وسيقوم فريق Ustern بالرد عليك فوراً.", { parse_mode: 'HTML' });
 });
 
-// ==========================================
-// تشغيل البوت لحظياً (Polling)
-// ==========================================
+bot.on('text', async (ctx) => {
+    // 1. إذا كان الرد من الجروب (بواسطة الموظف)
+    if (ctx.chat.id.toString() === SUPPORT_GROUP_ID && ctx.message.reply_to_message) {
+        const match = ctx.message.reply_to_message.text.match(/ID: (\d+)/);
+        if (match) {
+            const userId = match[1];
+            await bot.telegram.sendMessage(userId, `🎧 <b>رد الدعم من Ustern:</b>\n\n${ctx.message.text}`, { parse_mode: 'HTML' });
+            return ctx.reply("✅ تم إرسال ردك للعميل.");
+        }
+    }
+
+    // 2. إذا كان العميل يرسل مشكلته للبوت
+    if (activeTickets.has(ctx.from.id)) {
+        await bot.telegram.sendMessage(SUPPORT_GROUP_ID, 
+            `📩 <b>تذكرة دعم جديدة</b>\n\n👤 العميل: ${ctx.from.first_name}\n🆔 ID: ${ctx.from.id}\n📝 المشكلة: ${ctx.message.text}\n\n(رد بـ Reply على هذه الرسالة للرد على العميل)`, 
+            { parse_mode: 'HTML' });
+        return ctx.reply("✅ تم إرسال رسالتك لفريق الدعم، سيتم الرد عليك قريباً.");
+    }
+});
+
+// (باقي الكود الخاص بك كما هو...)
+// ... [هنا تضع كود الـ faq و guides و pricing و terms كما كان في ملفك السابق تماماً] ...
 
 bot.launch();
-
-console.log("🤖 Ustern Support Bot Started Successfully!");
-
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));
 
 const express = require("express");
 const app = express();
-
-app.get("/", (req, res) => {
-  res.send("Bot is alive ✅");
-});
-
-app.listen(3000, () => {
-  console.log("Server is running");
-});
+app.get("/", (req, res) => res.send("Bot is alive ✅"));
+app.listen(3000, () => console.log("Server is running"));
