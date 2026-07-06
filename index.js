@@ -5,6 +5,7 @@ const SUPPORT_GROUP_ID = '-1003902142304';
 const activeTickets = new Map();
 let ticketCounter = 1000;
 
+// قاعدة بيانات المنتجات كما هي
 const productsData = {
     netflix: { name: '🎬 Netflix', problems: [
         { id: 'net_1', btn: '🔐 الباسورد غلط / الحساب مقفل', title: 'الباسورد غلط أو الحساب مقفل', steps: '1. تأكد من نسخ الإيميل والباسورد بدقة بدون أي مسافات زائدة.\n2. تأكد من أنك لم تقم بتغيير أي بيانات في الحساب.\n3. إذا استمرت المشكلة، فقد يكون الحساب تحت التحديث المؤقت من المتجر.' },
@@ -76,14 +77,18 @@ bot.on('message', async (ctx) => {
     const userId = ctx.from.id;
     const name = ctx.from.first_name;
     const username = ctx.from.username ? `(@${ctx.from.username})` : "";
-    if (ctx.chat.id.toString() === SUPPORT_GROUP_ID && ctx.message.reply_to_message) {
+    const chatId = ctx.chat.id.toString();
+
+    // 1. التعامل مع ردود الدعم (فقط من الجروب)
+    if (chatId === SUPPORT_GROUP_ID && ctx.message.reply_to_message) {
         const match = ctx.message.reply_to_message.text.match(/ID: (\d+)/);
         if (match) {
             const targetId = parseInt(match[1]);
             const ticket = activeTickets.get(targetId);
             if (ticket) {
-                ticket.chat.push(`🎧 الدعم: ${ctx.message.text || "صورة"}`);
-                await bot.telegram.sendMessage(targetId, `🎧 الدعم: ${ctx.message.text || "صورة"}`);
+                const replyText = ctx.message.text || "رسالة";
+                ticket.chat.push(`🎧 الدعم: ${replyText}`);
+                await bot.telegram.sendMessage(targetId, `🎧 الدعم: ${replyText}`);
                 await bot.telegram.editMessageText(SUPPORT_GROUP_ID, ctx.message.reply_to_message.message_id, null, 
                     `📩 تذكرة رقم: ${ticket.ticketId}\n👤 العميل: ${name} ${username}\n📱 واتساب: ${ticket.phone}\n\n${ticket.chat.join('\n')}\n\n---رد بـ Reply للرد---`);
                 startReminderTimer(targetId);
@@ -91,9 +96,12 @@ bot.on('message', async (ctx) => {
         }
         return;
     }
-    if (activeTickets.has(userId)) {
+
+    // 2. التعامل مع رسائل العميل (محادثة خاصة)
+    if (activeTickets.has(userId) && chatId !== SUPPORT_GROUP_ID) {
         const ticket = activeTickets.get(userId);
         const text = ctx.message.text || ctx.message.caption || "رسالة";
+        
         if (ticket.step === 'ASK_PHONE') {
             ticket.phone = text;
             ticket.step = 'ACTIVE';
