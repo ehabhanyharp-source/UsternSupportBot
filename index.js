@@ -5,7 +5,6 @@ const SUPPORT_GROUP_ID = '-1003902142304';
 const activeTickets = new Map();
 let ticketCounter = 1000;
 
-// قاعدة بيانات المنتجات كما هي
 const productsData = {
     netflix: { name: '🎬 Netflix', problems: [
         { id: 'net_1', btn: '🔐 الباسورد غلط / الحساب مقفل', title: 'الباسورد غلط أو الحساب مقفل', steps: '1. تأكد من نسخ الإيميل والباسورد بدقة بدون أي مسافات زائدة.\n2. تأكد من أنك لم تقم بتغيير أي بيانات في الحساب.\n3. إذا استمرت المشكلة، فقد يكون الحساب تحت التحديث المؤقت من المتجر.' },
@@ -43,7 +42,7 @@ function startReminderTimer(userId) {
     if (ticket.timer) clearTimeout(ticket.timer);
     ticket.timer = setTimeout(async () => {
         try { await bot.telegram.sendMessage(userId, "⚠️ نحن في انتظار ردك بخصوص استفسارك، هل تم حل المشكلة؟"); } 
-        catch (e) { console.log("تعذر إرسال التنبيه"); }
+        catch (e) { console.error("Error sending reminder"); }
     }, 5 * 60 * 1000);
 }
 
@@ -70,52 +69,55 @@ bot.action('start_support_flow', (ctx) => {
     const ticketId = ++ticketCounter;
     const queueNumber = activeTickets.size + 1;
     activeTickets.set(ctx.from.id, { step: 'ASK_PHONE', chat: [], ticketId: ticketId, queue: queueNumber });
-    ctx.reply(`🎯 تم فتح تذكرة دعم.\n🔢 رقم التذكرة: ${ticketId}\n⏳ ترتيبك في الانتظار: ${queueNumber}\n⏱️ متوسط وقت الرد المتوقع: 15-30 دقيقة.\n\nيرجى إدخال رقم الواتساب الخاص بك:`);
+    ctx.reply(`🎯 تذكرة رقم: ${ticketId}\n⏳ ترتيبك في الانتظار: ${queueNumber}\n⏱️ متوسط الرد: 15-30 دقيقة.\n\nيرجى إدخال رقم الواتساب:`);
 });
 
 bot.on('message', async (ctx) => {
-    const userId = ctx.from.id;
-    const name = ctx.from.first_name;
-    const username = ctx.from.username ? `(@${ctx.from.username})` : "";
-    const chatId = ctx.chat.id.toString();
+    try {
+        const userId = ctx.from.id;
+        const name = ctx.from.first_name;
+        const username = ctx.from.username ? `(@${ctx.from.username})` : "";
+        const chatId = ctx.chat.id.toString();
 
-    // 1. التعامل مع ردود الدعم (فقط من الجروب)
-    if (chatId === SUPPORT_GROUP_ID && ctx.message.reply_to_message) {
-        const match = ctx.message.reply_to_message.text.match(/ID: (\d+)/);
-        if (match) {
-            const targetId = parseInt(match[1]);
-            const ticket = activeTickets.get(targetId);
-            if (ticket) {
-                const replyText = ctx.message.text || "رسالة";
-                ticket.chat.push(`🎧 الدعم: ${replyText}`);
-                await bot.telegram.sendMessage(targetId, `🎧 الدعم: ${replyText}`);
-                await bot.telegram.editMessageText(SUPPORT_GROUP_ID, ctx.message.reply_to_message.message_id, null, 
-                    `📩 تذكرة رقم: ${ticket.ticketId}\n👤 العميل: ${name} ${username}\n📱 واتساب: ${ticket.phone}\n\n${ticket.chat.join('\n')}\n\n---رد بـ Reply للرد---`);
-                startReminderTimer(targetId);
+        if (chatId === SUPPORT_GROUP_ID && ctx.message.reply_to_message) {
+            const match = ctx.message.reply_to_message.text.match(/ID: (\d+)/);
+            if (match) {
+                const targetId = parseInt(match[1]);
+                const ticket = activeTickets.get(targetId);
+                if (ticket) {
+                    const replyText = ctx.message.text || "رسالة";
+                    ticket.chat.push(`🎧 الدعم: ${replyText}`);
+                    try { await bot.telegram.sendMessage(targetId, `🎧 الدعم: ${replyText}`); } catch(e) {}
+                    try { 
+                        await bot.telegram.editMessageText(SUPPORT_GROUP_ID, ctx.message.reply_to_message.message_id, null, 
+                        `📩 تذكرة رقم: ${ticket.ticketId}\n👤 العميل: ${name} ${username}\n📱 واتساب: ${ticket.phone}\n\n${ticket.chat.join('\n')}\n\n---رد بـ Reply للرد---`);
+                    } catch(e) {}
+                    startReminderTimer(targetId);
+                }
+            }
+            return;
+        }
+
+        if (activeTickets.has(userId) && chatId !== SUPPORT_GROUP_ID) {
+            const ticket = activeTickets.get(userId);
+            const text = ctx.message.text || ctx.message.caption || "رسالة";
+            if (ticket.step === 'ASK_PHONE') {
+                ticket.phone = text;
+                ticket.step = 'ACTIVE';
+                const init = await bot.telegram.sendMessage(SUPPORT_GROUP_ID, 
+                    `📩 تذكرة رقم: ${ticket.ticketId}\n🆔 ID: ${userId}\n👤 العميل: ${name} ${username}\n📱 واتساب: ${ticket.phone}\n\n---انتظار الرد---`);
+                ticket.msgId = init.message_id;
+                ctx.reply("✅ تم استلام طلبك، سيقوم الدعم بالرد قريباً.");
+            } else {
+                ticket.chat.push(`👤 ${name}: ${text}`);
+                try {
+                    await bot.telegram.editMessageText(SUPPORT_GROUP_ID, ticket.msgId, null, 
+                        `📩 تذكرة رقم: ${ticket.ticketId}\n🆔 ID: ${userId}\n👤 العميل: ${name} ${username}\n📱 واتساب: ${ticket.phone}\n\n${ticket.chat.join('\n')}\n\n---رد بـ Reply للرد---`);
+                    ctx.reply("✅ تم إرسال رسالتك للدعم.");
+                } catch(e) { console.error("Error updating ticket"); }
             }
         }
-        return;
-    }
-
-    // 2. التعامل مع رسائل العميل (محادثة خاصة)
-    if (activeTickets.has(userId) && chatId !== SUPPORT_GROUP_ID) {
-        const ticket = activeTickets.get(userId);
-        const text = ctx.message.text || ctx.message.caption || "رسالة";
-        
-        if (ticket.step === 'ASK_PHONE') {
-            ticket.phone = text;
-            ticket.step = 'ACTIVE';
-            const init = await bot.telegram.sendMessage(SUPPORT_GROUP_ID, 
-                `📩 تذكرة رقم: ${ticket.ticketId}\n🆔 ID: ${userId}\n👤 العميل: ${name} ${username}\n📱 واتساب: ${ticket.phone}\n\n---انتظار الرد---`);
-            ticket.msgId = init.message_id;
-            ctx.reply("✅ تم استلام طلبك، سيقوم الدعم بالرد عليك قريباً.");
-        } else {
-            ticket.chat.push(`👤 ${name}: ${text}`);
-            await bot.telegram.editMessageText(SUPPORT_GROUP_ID, ticket.msgId, null, 
-                `📩 تذكرة رقم: ${ticket.ticketId}\n🆔 ID: ${userId}\n👤 العميل: ${name} ${username}\n📱 واتساب: ${ticket.phone}\n\n${ticket.chat.join('\n')}\n\n---رد بـ Reply للرد---`);
-            ctx.reply("✅ تم إرسال رسالتك للدعم.");
-        }
-    }
+    } catch (err) { console.error("Critical Error:", err); }
 });
 
-bot.launch();
+bot.launch().catch(e => console.error("Launch Error:", e));
