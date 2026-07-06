@@ -219,5 +219,4 @@ bot.on('message', async (ctx) => {
         const match = replyText.match(/ID:\s*(\d+)/);
         if (match) {
             const targetId = parseInt(match[1]);
-            const ticket = activeTickets.get(targetId);
-            if (ticket) {
+            const
